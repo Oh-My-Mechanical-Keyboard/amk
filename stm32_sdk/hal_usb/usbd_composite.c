@@ -82,11 +82,6 @@ static uint8_t  webusb_datain(USBD_HandleTypeDef *pdev, uint8_t epnum, void* use
 static uint8_t  webusb_dataout(USBD_HandleTypeDef *pdev, uint8_t epnum, void* user);
 static uint8_t  webusb_write(USBD_HandleTypeDef *pdev, uint8_t epnum, uint8_t* data, uint16_t size, void* user);
 
-typedef enum {
-    WEBUSB_KEYMAP_SET = 1,
-    WEBUSB_KEYMAP_GET,
-} webusb_command_t;
-
 usbd_class_interface_t USBD_WEBUSB = {
     webusb_setup,
     webusb_datain,
@@ -314,8 +309,18 @@ uint8_t usbd_comp_send(USBD_HandleTypeDef *pdev, uint8_t type, uint8_t *report, 
         return USBD_FAIL;
     }
     usbd_interface_t* interface = find_interface_by_type(type);
+    static uint8_t send_buf[16];
+    uint16_t send_len = len;
+    if (type != 0) {
+        send_len++;
+        send_buf[0] = type;
+        memcpy(&send_buf[1], report, len);
+    } else {
+        memcpy(&send_buf[0], report, len);
+    }
     if (interface && interface->instance->write) {
-        return interface->instance->write(pdev, interface->epin, report, len, interface->data);
+        //return interface->instance->write(pdev, interface->epin, report, len, interface->data);
+        return interface->instance->write(pdev, interface->epin, send_buf, send_len, interface->data);
     }
 
     return USBD_FAIL;
@@ -572,8 +577,9 @@ static uint8_t  webusb_datain(USBD_HandleTypeDef *pdev, uint8_t epnum, void* use
     return USBD_OK;
 }
 
-__attribute__((weak)) void uart_keymap_set(uint8_t layer, uint8_t row, uint8_t col, uint16_t keycode){}
-__attribute__((weak)) void uart_keymap_get(uint8_t layer, uint8_t row, uint8_t col){}
+
+extern void amk_keymap_set(uint8_t layer, uint8_t row, uint8_t col, uint16_t keycode);
+extern uint16_t amk_keymap_get(uint8_t layer, uint8_t row, uint8_t col);
 
 static uint8_t webusb_dataout(USBD_HandleTypeDef *pdev, uint8_t epnum, void* user)
 {
@@ -587,30 +593,32 @@ static uint8_t webusb_dataout(USBD_HandleTypeDef *pdev, uint8_t epnum, void* use
             hwusb->recv_buffer[0],
             USBD_LL_GetRxDataSize(pdev, epnum));
 
-    // just write back
     switch (hwusb->recv_buffer[0]) {
-        case WEBUSB_KEYMAP_SET:
-            //uart_keymap_set(hwusb->recv_buffer[1], hwusb->recv_buffer[2], hwusb->recv_buffer[3], (hwusb->recv_buffer[5]<<8) | hwusb->recv_buffer[4]);
+        case WEBUSB_KEYMAP_SET: {
+            amk_keymap_set(hwusb->recv_buffer[1], hwusb->recv_buffer[2], hwusb->recv_buffer[3], (hwusb->recv_buffer[5]<<8) | hwusb->recv_buffer[4]);
             amk_printf("cmd=%d, layer=%d, row=%d, col=%d, keycode=%d\n",
                         hwusb->recv_buffer[0], 
                         hwusb->recv_buffer[1],
                         hwusb->recv_buffer[2],
                         hwusb->recv_buffer[3],
                         (hwusb->recv_buffer[5]<<8) | hwusb->recv_buffer[4]);
-            break;
+            USBD_StatusTypeDef status = USBD_LL_Transmit(pdev, epnum | 0x80, hwusb->send_buffer, 32);
+            amk_printf("WEBUSB keymap SET writeback: status=%d\n", status);
+            } break;
             
-        case WEBUSB_KEYMAP_GET:
-            //uart_keymap_get(hwusb->recv_buffer[1], hwusb->recv_buffer[2], hwusb->recv_buffer[3]);
+        case WEBUSB_KEYMAP_GET: {
+            uint16_t keycode = amk_keymap_get(hwusb->recv_buffer[1], hwusb->recv_buffer[2], hwusb->recv_buffer[3]);
             amk_printf("cmd=%d, layer=%d, row=%d, col=%d\n",
                         hwusb->recv_buffer[0], 
                         hwusb->recv_buffer[1],
                         hwusb->recv_buffer[2],
                         hwusb->recv_buffer[3]);
-            hwusb->recv_buffer[4] = 0;
-            hwusb->recv_buffer[5] = 4;
+            hwusb->recv_buffer[4] = keycode&0xFF;
+            hwusb->recv_buffer[5] = (keycode>>8)&0xFF;
             memcpy(hwusb->send_buffer, hwusb->recv_buffer, 32);
-            USBD_LL_Transmit(pdev, 0x83, hwusb->send_buffer, 32);
-            break;
+            USBD_StatusTypeDef status = USBD_LL_Transmit(pdev, epnum | 0x80, hwusb->send_buffer, 32);
+            amk_printf("WEBUSB keymap GET writeback: status=%d\n", status);
+            } break;
         default:
             amk_printf("WEBUSB unknown command: %d\n",hwusb->recv_buffer[0]);
             break;
