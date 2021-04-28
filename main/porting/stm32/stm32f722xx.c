@@ -3,7 +3,7 @@
  */
 
 #include "generic_hal.h"
-#include "tusb.h"
+#include "usb_descriptors.h"
 
 
 I2C_HandleTypeDef hi2c1;
@@ -20,6 +20,8 @@ DMA_HandleTypeDef hdma_spi2_tx;
 
 TIM_HandleTypeDef htim2;
 DMA_HandleTypeDef hdma_tim2_ch1;
+
+RTC_HandleTypeDef hrtc;
 
 #ifdef TINYUSB_ENABLE
 void OTG_FS_IRQHandler(void)
@@ -57,44 +59,48 @@ void SystemClock_Config(void)
     /** Initializes the RCC Oscillators according to the specified parameters
      * in the RCC_OscInitTypeDef structure.
      */
-    RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+    RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_LSI|RCC_OSCILLATORTYPE_HSE;
     RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+    RCC_OscInitStruct.LSIState = RCC_LSI_ON;
     RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
     RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
     RCC_OscInitStruct.PLL.PLLM = 8;
     RCC_OscInitStruct.PLL.PLLN = 432;
     RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
     RCC_OscInitStruct.PLL.PLLQ = 9;
-    if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) {
+    if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+    {
         Error_Handler();
     }
     /** Activate the Over-Drive mode
      */
-    if (HAL_PWREx_EnableOverDrive() != HAL_OK) {
+    if (HAL_PWREx_EnableOverDrive() != HAL_OK)
+    {
         Error_Handler();
     }
     /** Initializes the CPU, AHB and APB buses clocks
      */
-    RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+    RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                                |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
     RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
     RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
     RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
     RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV4;
 
-    if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_7) != HAL_OK) {
+    if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_7) != HAL_OK)
+    {
         Error_Handler();
     }
-    PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_I2C1|RCC_PERIPHCLK_I2S |RCC_PERIPHCLK_CLK48;
-    PeriphClkInitStruct.PLLI2S.PLLI2SN = 192;
-    PeriphClkInitStruct.PLLI2S.PLLI2SR = 2;
-    PeriphClkInitStruct.PLLI2S.PLLI2SQ = 2;
-    PeriphClkInitStruct.PLLI2SDivQ = 1;
-    PeriphClkInitStruct.I2sClockSelection = RCC_I2SCLKSOURCE_PLLI2S;
+    PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_RTC|RCC_PERIPHCLK_I2C1
+                                |RCC_PERIPHCLK_CLK48;
+    PeriphClkInitStruct.RTCClockSelection = RCC_RTCCLKSOURCE_LSI;
     PeriphClkInitStruct.I2c1ClockSelection = RCC_I2C1CLKSOURCE_PCLK1;
     PeriphClkInitStruct.Clk48ClockSelection = RCC_CLK48SOURCE_PLL;
-    if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct) != HAL_OK) {
+    if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct) != HAL_OK)
+    {
         Error_Handler();
     }
+
 }
 
 /**
@@ -147,7 +153,7 @@ static void MX_SPI1_Init(void)
     hspi1.Init.CLKPolarity = SPI_POLARITY_HIGH;
     hspi1.Init.CLKPhase = SPI_PHASE_2EDGE;
     hspi1.Init.NSS = SPI_NSS_SOFT;
-    hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_8;
+    hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_4;
     hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
     hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
     hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -168,7 +174,7 @@ static void MX_SPI2_Init(void)
     hspi2.Init.CLKPolarity = SPI_POLARITY_LOW;
     hspi2.Init.CLKPhase = SPI_PHASE_1EDGE;
     hspi2.Init.NSS = SPI_NSS_SOFT;
-    hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_4;
+    hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
     hspi2.Init.FirstBit = SPI_FIRSTBIT_MSB;
     hspi2.Init.TIMode = SPI_TIMODE_DISABLE;
     hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -246,6 +252,21 @@ static void MX_DMA_Init(void)
     HAL_NVIC_EnableIRQ(DMA2_Stream3_IRQn);
 }
 
+static void MX_RTC_Init(void)
+{
+    hrtc.Instance = RTC;
+    hrtc.Init.HourFormat = RTC_HOURFORMAT_24;
+    hrtc.Init.AsynchPrediv = 127;
+    hrtc.Init.SynchPrediv = 255;
+    hrtc.Init.OutPut = RTC_OUTPUT_DISABLE;
+    hrtc.Init.OutPutPolarity = RTC_OUTPUT_POLARITY_HIGH;
+    hrtc.Init.OutPutType = RTC_OUTPUT_TYPE_OPENDRAIN;
+    if (HAL_RTC_Init(&hrtc) != HAL_OK)
+    {
+        Error_Handler();
+    }
+}
+
 #if defined(TINYUSB_ENABLE)
 void usb_port_init(void)
 {
@@ -300,7 +321,18 @@ void custom_board_init(void)
     MX_I2C1_Init();
     MX_SPI1_Init();
     MX_SPI2_Init();
+    MX_RTC_Init();
     MX_TIM2_Init();
+#ifdef DYNAMIC_CONFIGURATION
+    uint32_t magic = HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR1);
+    if (magic > 0) {
+        usb_setting |= USB_MSC_BIT;
+    } else {
+        usb_setting |= USB_WEBUSB_BIT;
+    }
+    HAL_PWR_EnableBkUpAccess();
+    HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR1, 0);
+#endif
 }
 
 void custom_board_task(void)

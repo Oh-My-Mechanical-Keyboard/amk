@@ -26,14 +26,14 @@
 #endif
 
 rf_driver_t rf_driver = {
-    .rf_led = 0,
-    .usb_led = 0,
-    .vbus_enabled = 0,
-    .output_target = OUTPUT_RF | OUTPUT_MASK,
+    .rf_led         = 0,
+    .usb_led        = 0,
+    .vbus_enabled   = 0,
+    .output_target  = OUTPUT_RF | OUTPUT_MASK,
     .matrix_changed = 0,
-    .battery_power = 100,
-    .sleep_count = 0,
-    .scan_count = 0,
+    .battery_power  = 100,
+    .sleep_count    = 0,
+    .scan_count     = 0,
 };
 
 bool rf_is_ble = true;
@@ -54,6 +54,19 @@ void assert_nrf_callback(uint16_t line_num, const uint8_t * p_file_name)
     app_error_handler(DEAD_BEEF, line_num, p_file_name);
 }
 
+#ifdef RESET_ON_ERROR
+void app_error_fault_handler(uint32_t id, uint32_t pc, uint32_t info)
+{
+    __disable_irq();
+    NRF_LOG_FINAL_FLUSH();
+
+    NRF_LOG_ERROR("Fatal error");
+    NRF_BREAKPOINT_COND;
+    // On assert, the system can only recover with a reset.
+    NRF_LOG_WARNING("System reset");
+    NVIC_SystemReset();
+}
+#endif
 
 /**@brief Function for the Event Scheduler initialization.
  */
@@ -141,7 +154,6 @@ void board_init(void)
     if (GZLL_IS_HOST || GZLL_IS_CLIENT || (reason&RST_USE_GZLL)) {
         NRF_LOG_INFO("use GAZELL protocol");
 
-        //rf_driver.is_ble = 0;
         rf_is_ble = false;
         gzll_keyboard_init(GZLL_IS_HOST);
 
@@ -150,7 +162,6 @@ void board_init(void)
     } else {
         NRF_LOG_INFO("use BLE protocol");
 
-        //rf_driver.is_ble = 1;
         rf_is_ble = true;
         ble_keyboard_init();
 

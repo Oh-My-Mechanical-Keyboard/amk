@@ -6,6 +6,7 @@
 #include "usb_descriptors.h"
 #include "amk_printf.h"
 
+RTC_HandleTypeDef hrtc;
 UART_HandleTypeDef huart1;
 DMA_HandleTypeDef hdma_usart1_rx;
 DMA_HandleTypeDef hdma_usart1_tx;
@@ -39,10 +40,11 @@ void SystemClock_Config(void)
     /** Initializes the RCC Oscillators according to the specified parameters
     * in the RCC_OscInitTypeDef structure.
     */
-    RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+    RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_LSI|RCC_OSCILLATORTYPE_HSE;
     RCC_OscInitStruct.HSEState = RCC_HSE_ON;
     RCC_OscInitStruct.HSEPredivValue = RCC_HSE_PREDIV_DIV1;
     RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+    RCC_OscInitStruct.LSIState = RCC_LSI_ON;
     RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
     RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
     RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL9;
@@ -61,11 +63,13 @@ void SystemClock_Config(void)
     if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK) {
       Error_Handler();
     }
-    PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USB;
+    PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_RTC|RCC_PERIPHCLK_USB;
     PeriphClkInit.UsbClockSelection = RCC_USBCLKSOURCE_PLL_DIV1_5;
+    PeriphClkInit.RTCClockSelection = RCC_RTCCLKSOURCE_LSI;
     if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK) {
       Error_Handler();
     }
+
 }
 
 static void MX_GPIO_Init(void)
@@ -131,6 +135,17 @@ static void MX_USB_DEVICE_Init(void)
     __HAL_RCC_USB_CLK_ENABLE();
 }
 
+static void MX_RTC_Init(void)
+{
+    hrtc.Instance = RTC;
+    hrtc.Init.AsynchPrediv = RTC_AUTO_1_SECOND;
+    hrtc.Init.OutPut = RTC_OUTPUTSOURCE_ALARM;
+    if (HAL_RTC_Init(&hrtc) != HAL_OK)
+    {
+        Error_Handler();
+    }
+}
+
 void custom_board_init(void)
 {
     SystemClock_Config();
@@ -138,6 +153,7 @@ void custom_board_init(void)
     MX_DMA_Init();
     MX_USART1_UART_Init();
     MX_GPIO_Init();
+    MX_RTC_Init();
     
     MX_USB_DEVICE_Init();
 }

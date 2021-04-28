@@ -416,6 +416,8 @@ static void rgb_matrix_set_enable(uint8_t enable)
 {
     matrix_state.config.enable = enable;
     eeconfig_update_rgb_matrix(&matrix_state.config);
+    if (matrix_state.config.enable) 
+        matrix_state.driver->init();
 }
 
 void rgb_matrix_inc_hue(void)
